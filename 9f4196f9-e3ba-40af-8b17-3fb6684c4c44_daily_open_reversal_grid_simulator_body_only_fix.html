@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Open Reversal — Grid Simulator</title>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#111c2e;--line:#26364d;--text:#e5edf7;--muted:#91a4bb;--green:#22c55e;--red:#ef4444;--blue:#168bff;--yellow:#facc15}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+h1{font-size:18px;margin:0} .sub{color:var(--muted);font-size:12px}
+main{max-width:1440px;margin:auto;padding:16px;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+select,input,button{background:#0b1423;color:var(--text);border:1px solid #34465f;border-radius:7px;padding:8px 10px;font:inherit}
+button{cursor:pointer}button:hover{border-color:#6d8db5}.primary{background:#17365b;border-color:#2b5f96}
+#chart{height:590px;width:100%;position:relative}
+#status{margin-top:10px;color:var(--muted);min-height:24px}
+.grid-note{font-size:12px;color:var(--muted);margin:8px 0 0}
+h2{font-size:15px;margin:0 0 12px}
+.setting{margin:13px 0}.setting label{display:block;font-size:13px;margin-bottom:5px}.setting small{display:block;color:var(--muted);margin-top:4px}
+.setting input[type=number]{width:100%}.setting input[type=color]{width:100%;height:38px;padding:3px}
+.check{display:flex;align-items:center;gap:8px}.check input{margin:0}
+.stat{padding:10px;border:1px solid var(--line);border-radius:8px;margin-top:9px}.stat b{display:block;font-size:12px;color:var(--muted);font-weight:500}.stat span{font-size:15px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;color:var(--muted);font-size:12px}.dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+footer{max-width:1440px;margin:0 auto;padding:0 16px 18px;color:var(--muted);font-size:12px}
+@media(max-width:900px){main{grid-template-columns:1fr}#chart{height:480px}}
+</style>
+</head>
+<body>
+<header><div><h1>Daily Open Reversal — Grid Simulator</h1><div class="sub">Mô phỏng chiến lược trên nến 30 phút · UTC</div></div><div class="sub" id="connection">Đang khởi tạo…</div></header>
+<main>
+<section class="panel">
+ <div class="toolbar">
+  <label>Coin <select id="symbol"><option>BTCUSDT</option><option>DOGEUSDT</option><option>ETHUSDT</option><option>SOLUSDT</option><option>BNBUSDT</option><option>XRPUSDT</option></select></label>
+  <label>Khung <select disabled><option>30m</option></select></label>
+  <button class="primary" id="refresh">Làm mới</button>
+  <button id="resetZoom">Đặt lại khung nhìn</button>
+ </div>
+ <div id="chart"></div>
+ <div id="status">Đang tải dữ liệu…</div>
+ <div class="legend">
+  <span><i class="dot" style="background:#22c55e"></i>Nến xanh hợp lệ</span>
+  <span><i class="dot" style="background:#168bff"></i>Nến xanh không hợp lệ</span>
+  <span><i class="dot" style="background:#ef4444"></i>Nến đỏ hợp lệ</span>
+  <span><i class="dot" style="background:#facc15"></i>Nến đỏ không hợp lệ</span>
+ </div>
+ <p class="grid-note">Lưới là lớp nền chung của biểu đồ; nến được thay bằng dữ liệu coin đang chọn. Khi zoom/pan, lưới và nến cùng nằm trong hệ tọa độ biểu đồ.</p>
+</section>
+<aside class="panel">
+ <h2>Settings — Tiêu chí nến hợp lệ</h2>
+ <div class="setting"><label for="threshold">Thân nến tối thiểu so với 1 ô lưới (%)</label><input id="threshold" type="number" min="1" max="1000" step="1" value="80"><small>Ví dụ 80 nghĩa là thân nến phải cao ít nhất 0,8 lần chiều cao ô lưới.</small></div>
+ <div class="setting"><label for="bullInvalid">Màu nến xanh không hợp lệ</label><input id="bullInvalid" type="color" value="#168bff"></div>
+ <div class="setting"><label for="bullValid">Màu nến xanh hợp lệ</label><input id="bullValid" type="color" value="#22c55e"></div>
+ <div class="setting"><label for="bearInvalid">Màu nến đỏ không hợp lệ</label><input id="bearInvalid" type="color" value="#facc15"></div>
+ <div class="setting"><label for="bearValid">Màu nến đỏ hợp lệ</label><input id="bearValid" type="color" value="#ef4444"></div>
+ <div class="setting check"><input id="showGrid" type="checkbox" checked><label for="showGrid">Hiển thị lưới nền</label></div>
+ <div class="setting check"><input id="showLevels" type="checkbox" checked><label for="showLevels">Hiển thị Daily Open / SL / TP</label></div>
+ <button class="primary" id="apply" style="width:100%">Áp dụng cài đặt</button>
+ <div class="stat"><b>Trạng thái setup hôm nay (UTC)</b><span id="setup">—</span></div>
+ <div class="stat"><b>Daily Open</b><span id="dailyOpen">—</span></div>
+ <div class="stat"><b>Ngưỡng đang dùng</b><span id="thresholdNow">80%</span></div>
+ <div class="stat"><b>Ghi chú</b><span style="font-size:12px">Chỉ đánh giá nến 30m đã đóng. Nến đang chạy không được dùng để xác nhận.</span></div>
+</aside>
+</main>
+<footer>
+Bản mô phỏng tham khảo, không phải TradingView chính thức và không đặt lệnh. Dữ liệu lấy từ Binance Spot API; cần kết nối internet. Việc đo thân nến theo ô lưới được thực hiện trên biểu đồ đang hiển thị: mức zoom có thể làm thay đổi tỷ lệ pixel giữa thân nến và ô lưới. Giá chạm Daily Open/SL/TP trong dữ liệu 30m chỉ là ước lượng, không xác định được thứ tự biến động bên trong nến.
+</footer>
+<script>
+(() => {
+ const $=id=>document.getElementById(id);
+ let chart, series, candles=[], raw=[], dailyOpenLine, slLine, tpLine, refreshTimer;
+ const chartEl=$('chart');
+ const chartOptions={
+  layout:{background:{color:'#0b1220'},textColor:'#b7c7da'},
+  grid:{vertLines:{color:'#1a2a40',style:0},horzLines:{color:'#1a2a40',style:0}},
+  rightPriceScale:{borderColor:'#26364d'},timeScale:{borderColor:'#26364d',timeVisible:true,secondsVisible:false},
+  crosshair:{mode:0},handleScroll:{mouseWheel:true,pressedMouseMove:true},handleScale:{mouseWheel:true,pinch:true}
+ };
+ chart=LightweightCharts.createChart(chartEl,chartOptions);
+ series=chart.addCandlestickSeries({upColor:'#22c55e',downColor:'#ef4444',borderUpColor:'#22c55e',borderDownColor:'#ef4444',wickUpColor:'#22c55e',wickDownColor:'#ef4444'});
+ function utcTime(t){return Math.floor(t/1000)}
+ function fmt(v){return Number.isFinite(v)?v.toPrecision(8):'—'}
+ function setStatus(s){$('status').textContent=s}
+ function cellHeightPx(){
+   // One logical grid cell is defined as 1/12 of the plot-area height.
+   // It is a shared visual background unit, not a coin-price percentage.
+   const h=chartEl.clientHeight;
+   return Math.max(12,(h-30)/12);
+ }
+ function bodyGridRatio(c){
+   // Measure ONLY the candle body: Open-to-Close. High/Low (wicks) are never used.
+   // Exact/near Doji candles have zero body and are therefore always below any
+   // positive threshold, regardless of how long their upper/lower wicks are.
+   const bodyPrice=Math.abs(c.close-c.open);
+   if(!Number.isFinite(bodyPrice) || bodyPrice<=0)return 0;
+   const yOpen=series.priceToCoordinate(c.open);
+   const yClose=series.priceToCoordinate(c.close);
+   if(yOpen==null || yClose==null)return 0;
+   const bodyPixels=Math.abs(yClose-yOpen);
+   const cellPixels=cellHeightPx();
+   return cellPixels>0 ? bodyPixels/cellPixels : 0;
+ }
+ function gridOverlay(){
+   const old=document.getElementById('gridOverlay'); if(old)old.remove();
+   if(!$('showGrid').checked)return;
+   const canv=document.createElement('canvas');canv.id='gridOverlay';
+   Object.assign(canv.style,{position:'absolute',inset:'0',width:'100%',height:'100%',pointerEvents:'none',zIndex:'2'});
+   chartEl.style.position='relative';chartEl.appendChild(canv);
+   const dpr=window.devicePixelRatio||1, w=chartEl.clientWidth,h=chartEl.clientHeight;
+   canv.width=w*dpr;canv.height=h*dpr;
+   const ctx=canv.getContext('2d');ctx.scale(dpr,dpr);
+   const cell=cellHeightPx();ctx.strokeStyle='rgba(105,139,177,.13)';ctx.lineWidth=1;
+   // Grid is drawn as a common background sheet. It remains the same on symbol changes.
+   for(let x=0;x<w;x+=cell){ctx.beginPath();ctx.moveTo(Math.round(x)+.5,0);ctx.lineTo(Math.round(x)+.5,h);ctx.stroke()}
+   for(let y=0;y<h;y+=cell){ctx.beginPath();ctx.moveTo(0,Math.round(y)+.5);ctx.lineTo(w,Math.round(y)+.5);ctx.stroke()}
+ }
+ function applyGridColors(){
+   series.applyOptions({upColor:$('bullValid').value,downColor:$('bearValid').value,
+     borderUpColor:$('bullValid').value,borderDownColor:$('bearValid').value,
+     wickUpColor:$('bullValid').value,wickDownColor:$('bearValid').value});
+ }
+ function calculate(){
+   if(!raw.length)return;
+   const now=Math.floor(Date.now()/1000), dayStart=Math.floor(now/86400)*86400;
+   const today=raw.filter(c=>c.time>=dayStart && c.time<dayStart+86400);
+   if(!today.length){$('setup').textContent='Chưa có nến đầu ngày UTC';return}
+   const first=today[0], dir=first.close>first.open?'green':first.close<first.open?'red':'doji';
+   $('dailyOpen').textContent=fmt(first.open);
+   const closed=today.filter(c=>c.time+1800<=now);
+   if(!closed.length){$('setup').textContent='Đang chờ nến 30m đóng';return}
+   if(dir==='doji'){ $('setup').textContent='Nến đầu ngày Doji — không xác định hướng';return}
+
+   // State machine:
+   // - Before a valid candle is found, same-colour invalid candles keep the search alive.
+   // - An opposite-colour candle cancels only while the search is still active.
+   // - The FIRST valid same-colour candle locks the setup permanently for this day.
+   // - Once locked, later candle colours are irrelevant to setup validity.
+   const threshold=Math.max(1,Number($('threshold').value)||80)/100;
+   let validCandle=null, cancelled=false, extreme=null;
+   let runningExtreme=dir==='green'?-Infinity:Infinity;
+
+   for(const c of closed){
+     // This branch is reached only until the first valid candle is found.
+     const opposite = dir==='green' ? c.close<c.open : c.close>c.open;
+     if(opposite){cancelled=true;break}
+
+     // Track the extreme only while searching for the qualifying candle.
+     if(dir==='green'){
+       if(c.high>runningExtreme){runningExtreme=c.high;extreme=c}
+     }else{
+       if(c.low<runningExtreme){runningExtreme=c.low;extreme=c}
+     }
+
+     if(bodyGridRatio(c)>=threshold){
+       validCandle=c;
+       break; // LOCK: never inspect later candles for cancellation.
+     }
+   }
+
+   if(cancelled){
+     $('setup').textContent='Đã hủy: nến ngược màu xuất hiện trước nến hợp lệ';
+     return;
+   }
+   if(!validCandle){
+     $('setup').textContent='Đang chờ nến cùng màu đạt ngưỡng '+threshold*100+'% ô lưới';
+     return;
+   }
+
+   $('setup').textContent=(dir==='red'?'Đủ điều kiện LONG':'Đủ điều kiện SHORT')
+     +' · nến hợp lệ đầu tiên '+new Date(validCandle.time*1000).toISOString().slice(11,16)
+     +' UTC · setup đã khóa, chờ giá quay về Daily Open';
+
+   // SL/TP are based on the extreme candle formed up to and including the qualifying candle.
+   if(extreme){
+     let stop;
+     if(dir==='red'){
+       const bodyLow=Math.min(extreme.open,extreme.close), lowerWick=bodyLow-extreme.low, body=Math.abs(extreme.close-extreme.open);
+       stop=lowerWick>body?bodyLow:extreme.low;
+       const risk=first.open-stop;
+       if(risk>0){slLine.applyOptions({price:stop});tpLine.applyOptions({price:first.open+risk});}
+     }else{
+       const bodyHigh=Math.max(extreme.open,extreme.close), upperWick=extreme.high-bodyHigh, body=Math.abs(extreme.close-extreme.open);
+       stop=upperWick>body?bodyHigh:extreme.high;
+       const risk=stop-first.open;
+       if(risk>0){slLine.applyOptions({price:stop});tpLine.applyOptions({price:first.open-risk});}
+     }
+   }
+ }
+ function recolor(){
+   if(!raw.length)return;
+   const now=Math.floor(Date.now()/1000),dayStart=Math.floor(now/86400)*86400;
+   const today=raw.filter(c=>c.time>=dayStart && c.time+1800<=now);
+   if(!today.length){series.setData(raw.map(c=>({...c})));return}
+   const first=today[0],dir=first.close>first.open?'green':first.close<first.open?'red':'doji';
+   const threshold=Math.max(1,Number($('threshold').value)||80)/100;
+   let validFound=false,cancelled=false;
+
+   const colored=raw.map(c=>{
+     if(c.time<dayStart || c.time>=dayStart+86400 || c.time+1800>now)return {...c};
+
+     // Only candles up to the first qualifying candle participate in the search.
+     // After validFound=true, subsequent candles keep their normal chart colours;
+     // importantly, they cannot cancel or alter the already-confirmed setup.
+     if(validFound || cancelled || dir==='doji')return {...c};
+
+     const opposite = dir==='green' ? c.close<c.open : c.close>c.open;
+     if(opposite){cancelled=true;return {...c};}
+
+     // The ratio is based strictly on Open-Close body pixels; wick extremes
+     // (High/Low) do not enter the calculation. A Doji has ratio 0.
+     const valid=bodyGridRatio(c)>=threshold;
+     if(valid)validFound=true;
+
+     // Colour candidates by the day's required direction, not by the candle's
+     // raw up/down default. A Doji before qualification is an invalid candidate.
+     const color=dir==='green'
+       ? (valid?$('bullValid').value:$('bullInvalid').value)
+       : (valid?$('bearValid').value:$('bearInvalid').value);
+     return {...c,color,borderColor:color,wickColor:color};
+   });
+   series.setData(colored);
+ }
+ function refreshVisual(){
+   gridOverlay();
+   if(raw.length){recolor();calculate()}
+   $('thresholdNow').textContent=(Number($('threshold').value)||80)+'%';
+   if(!$('showLevels').checked){dailyOpenLine.applyOptions({visible:false});slLine.applyOptions({visible:false});tpLine.applyOptions({visible:false})}
+   else{dailyOpenLine.applyOptions({visible:true});slLine.applyOptions({visible:true});tpLine.applyOptions({visible:true})}
+ }
+ async function fetchAll(){
+   const symbol=$('symbol').value;
+   $('connection').textContent='Đang tải '+symbol+'…';
+   try{
+     let all=[],end=Date.now(),start=Date.UTC(2026,9,1);
+     while(start<end){
+       const url=`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=30m&startTime=${start}&endTime=${end}&limit=1000`;
+       const res=await fetch(url);if(!res.ok)throw new Error('Binance API '+res.status);
+       const data=await res.json();if(!data.length)break;
+       all=all.concat(data);
+       const next=data[data.length-1][0]+1;if(next<=start)break;start=next;
+       if(data.length<1000)break;
+     }
+     raw=all.map(k=>({time:utcTime(k[0]),open:+k[1],high:+k[2],low:+k[3],close:+k[4]}));
+     raw.sort((a,b)=>a.time-b.time);
+     // Lightweight Charts requires strictly ascending unique times.
+     raw=raw.filter((c,i)=>!i||c.time>raw[i-1].time);
+     series.setData(raw);
+     dailyOpenLine=series.createPriceLine({price:raw[0]?.open||0,color:'#a78bfa',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'Daily Open'});
+     slLine=series.createPriceLine({price:raw[0]?.low||0,color:'#fb7185',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'SL'});
+     tpLine=series.createPriceLine({price:raw[0]?.high||0,color:'#34d399',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'TP'});
+     applyGridColors();chart.timeScale().fitContent();refreshVisual();
+     $('connection').textContent=`${symbol} · ${raw.length.toLocaleString()} nến · cập nhật ${new Date().toLocaleTimeString()}`;
+     setStatus('Đã tải dữ liệu từ 01/10/2026 UTC. Tự động làm mới mỗi 60 giây.');
+   }catch(e){$('connection').textContent='Lỗi kết nối';setStatus('Không tải được dữ liệu: '+e.message+'. Hãy kiểm tra internet hoặc thử lại.')}
+ }
+ async function refreshLast(){
+   if(!raw.length)return fetchAll();
+   const symbol=$('symbol').value;
+   try{
+     const start=raw[raw.length-3]?.time*1000||Date.now()-3600000;
+     const r=await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=30m&startTime=${start}&limit=10`);
+     if(!r.ok)throw new Error('HTTP '+r.status);
+     const d=await r.json();
+     const map=new Map(raw.map(c=>[c.time,c]));
+     d.forEach(k=>map.set(utcTime(k[0]),{time:utcTime(k[0]),open:+k[1],high:+k[2],low:+k[3],close:+k[4]}));
+     raw=Array.from(map.values()).sort((a,b)=>a.time-b.time);
+     series.setData(raw);refreshVisual();
+     $('connection').textContent=`${symbol} · cập nhật ${new Date().toLocaleTimeString()}`;
+   }catch(e){$('connection').textContent='Lỗi cập nhật: '+e.message}
+ }
+ $('symbol').addEventListener('change',fetchAll);
+ $('refresh').addEventListener('click',fetchAll);
+ $('apply').addEventListener('click',()=>{
+   // Reset per-candle overrides, then immediately reclassify using the new settings.
+   // This redraw is independent of the 60-second market-data refresh interval.
+   if(raw.length) series.setData(raw.map(c=>({...c})));
+   applyGridColors();
+   chart.applyOptions({});
+   refreshVisual();
+   setStatus('Đã áp dụng cài đặt: màu nến và trạng thái hợp lệ đã được tính lại ngay lập tức.');
+ });
+ ['threshold','bullInvalid','bullValid','bearInvalid','bearValid','showGrid','showLevels'].forEach(id=>$(id).addEventListener('change',refreshVisual));
+ $('resetZoom').addEventListener('click',()=>chart.timeScale().fitContent());
+ chart.timeScale().subscribeVisibleLogicalRangeChange(()=>{if(raw.length)refreshVisual()});
+ new ResizeObserver(()=>{chart.applyOptions({width:chartEl.clientWidth,height:chartEl.clientHeight});refreshVisual()}).observe(chartEl);
+ fetchAll();
+ refreshTimer=setInterval(refreshLast,60000);
+})();
+</script>
+</body>
+</html>
